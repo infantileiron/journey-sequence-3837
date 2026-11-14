@@ -40,3 +40,23 @@ def put(table,item,insert_only=False):
    else:c.execute(f'INSERT INTO {table}(id,payload) VALUES(%s,%s) ON DUPLICATE KEY UPDATE payload=VALUES(payload)',(item['id'],payload))
   conn.commit();return item
  finally:conn.close()
+def compare_and_put(table,id,mutator,expected):
+ """原子读-改-写：仅当行的校验字段仍等于 expected 时才提交 mutator 的结果。
+
+ expected 为 (字段名, 期望值) 序列，任一字段不符则放弃写入并返回当前行，
+ 用于运行认领/发布的 fencing，避免迟到的 worker 覆盖新一轮计算的结果。
+ """
+ assert table in TABLES
+ expected=tuple(expected)
+ conn=connect()
+ try:
+  with conn.cursor() as c:
+   c.execute(f'SELECT payload FROM {table} WHERE id=%s FOR UPDATE',(id,));row=c.fetchone()
+   if row is None:raise HTTPException(404,'记录不存在')
+   current=json.loads(row[0])
+   if any(current.get(key)!=value for key,value in expected):return current,False
+   updated=mutator(current)
+   if not isinstance(updated,dict):updated=asdict(updated)
+   c.execute(f'UPDATE {table} SET payload=%s WHERE id=%s',(json.dumps(updated,ensure_ascii=False,allow_nan=False),id))
+  conn.commit();return updated,True
+ finally:conn.close()

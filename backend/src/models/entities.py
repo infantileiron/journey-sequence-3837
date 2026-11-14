@@ -31,6 +31,11 @@ class SequenceRun:
  result:dict[str,Any]=field(default_factory=dict)
  error:str=''
  created_at:str=''
+ attempt:int=0
+ claimed_at:str=''
+ heartbeat_at:str=''
+ completed_at:str=''
+ snapshot:dict[str,Any]=field(default_factory=dict)
 @dataclass
 class PathReview:
  id:str
